@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>EventX - Full Demo</title>
+<style>body{font-family:Arial;margin:14px}input,select,textarea{display:block;margin:6px 0;padding:8px;width:320px}button{padding:6px 10px;margin:4px}.card{border:1px solid #ccc;padding:10px;margin:10px 0;border-radius:6px}</style>
+</head>
+<body>
+<h1>EventX - Demo (Eventos, Usuários, Inscrições)</h1>
+
+<div id="auth">
+  <h3>Login</h3>
+  <input id="loginEmail" placeholder="Email">
+  <input id="loginSenha" placeholder="Senha" type="password">
+  <button onclick="doLogin()">Login</button>
+  <div id="loginMsg"></div>
+</div>
+
+<hr>
+<div id="app" style="display:none">
+  <h3>Usuário logado: <span id="userName"></span></h3>
+
+  <section>
+    <h4>Cadastrar usuário</h4>
+    <input id="uNome" placeholder="Nome">
+    <input id="uEmail" placeholder="Email">
+    <input id="uSenha" placeholder="Senha">
+    <button onclick="createUser()">Criar</button>
+  </section>
+
+  <section>
+    <h4>Criar evento</h4>
+    <input id="eTitle" placeholder="Título">
+    <textarea id="eDesc" placeholder="Descrição"></textarea>
+    <input id="eDate" type="datetime-local">
+    <input id="eLocation" placeholder="Localização">
+    <label><input id="eOnline" type="checkbox"> Online</label>
+    <button onclick="createEvent()">Criar Evento</button>
+  </section>
+
+  <hr>
+  <div id="eventsList"></div>
+  <h4>Minhas inscrições</h4>
+  <div id="myRegs"></div>
+</div>
+
+<script>
+const api = '/api';
+let currentUser = null;
+
+async function doLogin(){
+  const email = document.getElementById('loginEmail').value;
+  const senha = document.getElementById('loginSenha').value;
+  const res = await fetch(api + '/auth/login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email, senha})});
+  if(res.status === 200){
+    const data = await res.json();
+    currentUser = data.usuario; document.getElementById('userName').innerText = currentUser.nome; document.getElementById('auth').style.display='none'; document.getElementById('app').style.display='block';
+    loadEvents(); loadMyRegs(); document.getElementById('loginMsg').innerText = '';
+  } else { const err = await res.json().catch(()=>null); document.getElementById('loginMsg').innerText = (err && err.message) || 'Erro no login'; }
+}
+
+async function createUser(){
+  const nome = document.getElementById('uNome').value; const email = document.getElementById('uEmail').value; const senha = document.getElementById('uSenha').value;
+  await fetch(api + '/usuarios', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({nome, email, senha})});
+  alert('Usuário criado');
+}
+
+async function createEvent(){
+  const title = document.getElementById('eTitle').value; const description = document.getElementById('eDesc').value; const date = new Date(document.getElementById('eDate').value).toISOString(); const location = document.getElementById('eLocation').value; const isOnline = document.getElementById('eOnline').checked;
+  await fetch(api + '/eventos', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title, description, date, location, isOnline})});
+  loadEvents();
+}
+
+async function loadEvents(){
+  const res = await fetch(api + '/eventos'); const events = await res.json();
+  const c = document.getElementById('eventsList'); c.innerHTML='';
+  events.forEach(ev => {
+    const d = document.createElement('div'); d.className='card';
+    d.innerHTML = `<strong>${ev.title}</strong> - ${new Date(ev.date).toLocaleString()}<br>${ev.location || ''}<p>${ev.description||''}</p>
+      <button onclick='inscrever(${ev.id})'>Inscrever</button>`;
+    c.appendChild(d);
+  })
+}
+
+async function inscrever(eventId){
+  if(!currentUser) return alert('Faça login');
+  const res = await fetch(api + '/inscricoes', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({usuarioId: currentUser.id, eventoId: eventId})});
+  if(res.status===201){ alert('Inscrito!'); loadMyRegs(); } else { const err = await res.json().catch(()=>null); alert((err && err.message) || 'Erro'); }
+}
+
+async function loadMyRegs(){
+  if(!currentUser) return;
+  const res = await fetch(api + '/inscricoes/byuser/' + currentUser.id);
+  const regs = await res.json();
+  const c = document.getElementById('myRegs'); c.innerHTML='';
+  regs.forEach(r => { const div = document.createElement('div'); div.className='card'; div.innerHTML = `<strong>${r.evento.title}</strong> — ${new Date(r.createdAt).toLocaleString()} <button onclick='cancel(${r.id})'>Cancelar</button>`; c.appendChild(div); })
+}
+
+async function cancel(id){ if(!confirm('Cancelar inscrição?')) return; await fetch(api + '/inscricoes/' + id, {method:'DELETE'}); loadMyRegs(); }
+</script>
+</body>
+</html>
